@@ -180,6 +180,7 @@ and inserted to the top of current buffer.")
     ("%l" . js-doc-license)
     ("%d" . (current-time-string))
     ("%p" . js-doc-current-parameter-name)
+    ("%t" . js-doc-current-parameter-type)
     ("%f" . js-doc-current-function-name))
   "Format and value pair
 Format will be replaced its value in `js-doc-format-string'")
@@ -207,7 +208,7 @@ Format will be replaced its value in `js-doc-format-string'")
 
 ;; formats for function-doc
 
-(defcustom js-doc-parameter-line " * @param {} %p\n"
+(defcustom js-doc-parameter-line " * @param {%t} %p\n"
   "parameter line.
  %p will be replaced with the parameter name."
   :group 'js-doc)
@@ -234,7 +235,7 @@ When the function body contains this pattern,
 js-doc-throw-line will be inserted"
   :group 'js-doc)
 
-(defcustom js-doc-document-regexp "^\[ 	\]*\\*[^//]"
+(defcustom js-doc-document-regexp "^\[  \]*\\*[^//]"
   "regular expression of JsDoc comment
 When the string ahead of current point matches this pattarn,
 js-doc regards current state as in JsDoc style comment"
@@ -266,7 +267,7 @@ js-doc regards current state as in JsDoc style comment"
 
 (defun js-doc-pick-symbol-name (str)
   "Pick up symbol-name from str"
-  (js-doc-tail (delete "" (split-string str "[^a-zA-Z0-9_$]"))))
+  (mapcar #'js-doc--take-default-values (mapcar 'string-trim (delete "" (split-string str ",")))))
 
 (defun js-doc-block-has-regexp (begin end regexp)
   "Return t when regexp matched the current buffer string between begin-end"
@@ -298,7 +299,7 @@ js-doc regards current state as in JsDoc style comment"
 
 (defun js-doc--parse-function-params (from to)
   (mapcar #'js-doc-pick-symbol-name
-          (split-string (buffer-substring-no-properties from to) ",")))
+    (split-string (buffer-substring-no-properties from to) ",")))
 
 (defun js-doc--function-doc-metadata ()
   "Parse the function's metadata for use with JsDoc.
@@ -335,7 +336,23 @@ which is accomplished with js-doc--beginning-of-defun."
 
       metadata)))
 
-;;;###autoload
+(defun js-doc--take-default-values (str)
+  "Takes the STR and search for default values"
+  (split-string str "\s?=\s?"))
+
+(defun js-doc-get-parameter-type (params)
+  "The type of the default value"
+  (let (type)
+    (setq type (nth 1 params))
+    (cond
+     ((booleanp type) "")
+     ((string-match-p "^\\[" type) "Array")
+     ((string-match-p "^{" type) "Object")
+     ((string-match-p "^[0-9]" type) "Number")
+     ((string-match-p "false|true" type) "Boolean")
+     ((string-match-p "^['\|\"]" type) "String")
+     (t type))))
+
 (defun js-doc-insert-function-doc ()
   "Insert JsDoc style comment of the function
 The comment style can be custimized via `customize-group js-doc'"
@@ -344,25 +361,26 @@ The comment style can be custimized via `customize-group js-doc'"
 
   ;; Parse function info
   (let ((metadata (js-doc--function-doc-metadata))
-	(document-list '())
+        (document-list '())
   (description-marker (make-marker))
-	from)
+        from)
     (save-excursion
     ;; params
     (dolist (param (cdr (assoc 'params metadata)))
-      (setq js-doc-current-parameter-name param)
+      (setq js-doc-current-parameter-name (nth 0 (nth 0 param)))
+      (setq js-doc-current-parameter-type (js-doc-get-parameter-type (nth 0 param)))
       (add-to-list 'document-list
-		   (js-doc-format-string js-doc-parameter-line) t))
+                   (js-doc-format-string js-doc-parameter-line) t))
     ;; return / throw
     (when (assoc 'returns metadata)
       (add-to-list 'document-list
-		   (js-doc-format-string js-doc-return-line) t))
+                   (js-doc-format-string js-doc-return-line) t))
     (when (assoc 'throws metadata)
       (add-to-list 'document-list
-		   (js-doc-format-string js-doc-throw-line) t))
+                   (js-doc-format-string js-doc-throw-line) t))
     ;; end
     (add-to-list 'document-list
-		 (js-doc-format-string js-doc-bottom-line) t)
+                 (js-doc-format-string js-doc-bottom-line) t)
     ;; Insert the document
     (setq from (point))                 ; for indentation
 
@@ -419,7 +437,7 @@ The comment style can be custimized via `customize-group js-doc'"
 ;; http://www.emacswiki.org/emacs/UseIswitchBuffer
 (defun js-doc-icompleting-read (prompt collection)
   (let ((iswitchb-make-buflist-hook
-	 #'(lambda ()
+         #'(lambda ()
              (setq iswitchb-temp-buflist collection))))
     (iswitchb-read-buffer prompt nil nil)))
 
@@ -432,7 +450,7 @@ The comment style can be custimized via `customize-group js-doc'"
 (defun js-doc-blank-line-p (p)
   "Return t when the line at the current point is blank line"
   (save-excursion (eql (progn (beginning-of-line) (point))
-		       (progn (end-of-line) (point)))))
+                       (progn (end-of-line) (point)))))
 
 (defun js-doc-in-comment-p (p)
   "Return t when the point p is in the comment"
@@ -451,7 +469,7 @@ The comment style can be custimized via `customize-group js-doc'"
   (save-excursion
     (goto-char p)
     (and (search-backward "/**" nil t)
-	 (not (search-forward "*/" p t)))))
+         (not (search-forward "*/" p t)))))
 
 ;;;###autoload
 (defun js-doc-insert-tag ()
@@ -460,26 +478,25 @@ The comment style can be custimized via `customize-group js-doc'"
   (insert "@")
   (when (js-doc-in-document-p (point))
     (let ((tag (completing-read "Tag: " (js-doc-make-tag-list)
-				nil nil nil nil nil)))
+                                nil nil nil nil nil)))
       (unless (string-equal tag "")
-	(insert tag " ")))))
+        (insert tag " ")))))
 
 ;;;###autoload
 (defun js-doc-describe-tag ()
   "Describe the JsDoc tag"
   (interactive)
   (let ((tag (completing-read "Tag: " (js-doc-make-tag-list)
-			      nil t (thing-at-point 'word) nil nil))
-	(temp-buffer-show-hook #'(lambda ()
-				  (fill-region 0 (buffer-size))
-				  (fit-window-to-buffer))))
+                              nil t (thing-at-point 'word) nil nil))
+        (temp-buffer-show-hook #'(lambda ()
+                                  (fill-region 0 (buffer-size))
+                                  (fit-window-to-buffer))))
     (unless (string-equal tag "")
       (with-output-to-temp-buffer "JsDocTagDescription"
-	(princ (format "@%s\n\n%s"
-		       tag
-		       (cdr (assoc tag js-doc-all-tag-alist))))))))
+        (princ (format "@%s\n\n%s"
+                       tag
+                       (cdr (assoc tag js-doc-all-tag-alist))))))))
 
 (provide 'js-doc)
 
 ;;; js-doc.el ends here
-
