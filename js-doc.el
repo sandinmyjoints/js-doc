@@ -338,6 +338,9 @@ which is accomplished with js-doc--beginning-of-defun."
             end (scan-lists (1- begin) 1 0))
 
       ;; return / throw
+      ;;
+      ;; TODO: try to infer type of return value, can use the same
+      ;; patterns as used for parameter default values.
       (when (js-doc-block-has-regexp begin end js-doc-return-regexp)
         (add-to-list 'metadata `(returns . t)))
 
