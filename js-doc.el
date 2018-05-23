@@ -359,7 +359,7 @@ which is accomplished with js-doc--beginning-of-defun."
      ((string-match-p "^\\[" type) "Array")
      ((string-match-p "^{" type) "Object")
      ((string-match-p "^[0-9]" type) "Number")
-     ((string-match-p "false|true" type) "Boolean")
+     ((string-match-p "false\\|true" type) "Boolean")
      ((string-match-p "^['\|\"]" type) "String")
      (t type))))
 
