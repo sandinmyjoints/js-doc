@@ -427,12 +427,15 @@ The comment style can be custimized via `customize-group js-doc'"
         js-doc-top-line
         " * ${1:Function description.}\n"
         (mapconcat (lambda (param)
-                     (format
-                      " * @param {${%d:Type of %s}} %s - ${%d:Parameter description.}\n"
-                      (incf field-count)
-                      param
-                      param
-                      (incf field-count)))
+                     (let ((cleaned-param
+                            ;; HACK: param may be something like (("name} "))
+                            (s-trim (s-replace-all '(("(" . "") (")" . "") ("{" . "") ("}" . "")) (format "%s" param)))))
+                       (format
+                        " * @param {${%d:Type of %s}} %s - ${%d:Parameter description.}\n"
+                        (incf field-count)
+                        cleaned-param
+                        cleaned-param
+                        (incf field-count))))
                    (cdr (assoc 'params metadata))
                    "")
         (when (assoc 'returns metadata)
